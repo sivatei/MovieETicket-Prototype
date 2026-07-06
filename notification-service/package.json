@@ -1,0 +1,15 @@
+{
+  "name": "notification-service",
+  "version": "1.0.0",
+  "description": "MovieE-Ticket - Notification Service (Email only via SendGrid simulation)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "mysql2": "^3.6.0",
+    "uuid": "^9.0.0"
+  }
+}

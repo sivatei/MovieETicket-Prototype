@@ -1,0 +1,91 @@
+version: "3.8"
+
+# MovieE-Ticket — Movie Ticket Booking System (Prototype)
+# FESE209 Software Design | Team: Sivatey · Sveita · Sokhomal · Sonita
+#
+# Demonstrates:
+#   ADR-001 — Microservices (2 independent services)
+#   ADR-003 — MySQL (ACID transactions for booking)
+#   ADR-004 — Redis (seat lock TTL — prevents double-booking)
+#   ADR-005 — Async Notification (email only via SendGrid simulation)
+#
+# Usage:
+#   docker compose up --build      (first time)
+#   docker compose up              (subsequent runs)
+#   docker compose down            (stop)
+#   docker compose down -v         (stop + reset database)
+
+services:
+
+  # MySQL — ADR-003: relational DB for transactional booking and payment data
+  mysql:
+    image: mysql:8.0
+    container_name: movieeticket_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: movieeticket
+      MYSQL_DATABASE: movieeticket_db
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-pmovieeticket"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Redis — ADR-004: in-memory seat lock with TTL to prevent double-booking
+  redis:
+    image: redis:7-alpine
+    container_name: movieeticket_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Booking Service — ADR-001: independent microservice
+  booking-service:
+    build: ./booking-service
+    container_name: movieeticket_booking
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      DB_HOST: mysql
+      DB_USER: root
+      DB_PASSWORD: movieeticket
+      DB_NAME: movieeticket_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      NOTIFICATION_URL: http://notification-service:3002
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Notification Service — ADR-005: async, decoupled from booking flow
+  notification-service:
+    build: ./notification-service
+    container_name: movieeticket_notification
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: 3002
+      DB_HOST: mysql
+      DB_USER: root
+      DB_PASSWORD: movieeticket
+      DB_NAME: movieeticket_db
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  mysql_data:

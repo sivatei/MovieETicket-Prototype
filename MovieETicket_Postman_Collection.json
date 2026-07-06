@@ -1,0 +1,207 @@
+{
+  "info": {
+    "name": "MovieE-Ticket — Prototype API Collection",
+    "description": "FESE209 Final Project — Movie Ticket Booking System\nTeam: Sivatey · Sveita · Sokhomal · Sonita\nInstructor: Pen Voneat\n\nDemonstrates:\n- ADR-001: Microservices (2 independent services)\n- ADR-003: MySQL for transactional booking data\n- ADR-004: Redis seat-lock TTL (double-booking prevention)\n- ADR-005: Async email notification after booking (SendGrid simulation)\n\nRun order: Health Checks → Get Showtimes → Get Seats → Create Booking → Check Notifications → Double-Book Test → Cancel Booking",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Step 1 — Health Checks (ADR-001)",
+      "item": [
+        {
+          "name": "Booking Service Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3001/health",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["health"]
+            },
+            "description": "Proves ADR-001: Booking Service runs independently.\nExpected: { service: 'booking-service', status: 'ok' }"
+          }
+        },
+        {
+          "name": "Notification Service Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3002/health",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3002",
+              "path": ["health"]
+            },
+            "description": "Proves ADR-001: Notification Service runs independently.\nExpected: { service: 'notification-service', status: 'ok' }"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Step 2 — Browse Showtimes",
+      "item": [
+        {
+          "name": "Get All Showtimes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3001/showtimes",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["showtimes"]
+            },
+            "description": "Returns 2 seeded movies: Avengers: Doomsday and Mission Impossible 8.\nCopy a showtime 'id' value to use in the next request."
+          }
+        },
+        {
+          "name": "Get Seats for Showtime",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3001/showtimes/PASTE_SHOWTIME_ID_HERE/seats",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["showtimes", "PASTE_SHOWTIME_ID_HERE", "seats"]
+            },
+            "description": "Replace PASTE_SHOWTIME_ID_HERE with a showtime id from the previous request.\n\nReturns 7 seats with status:\n- available: free to book\n- temporarily_held: Redis lock active (ADR-004)\n- booked: confirmed booking in MySQL\n\nCopy an 'available' seat's 'id' for the booking step."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Step 3 — Create Booking (Core Demo)",
+      "item": [
+        {
+          "name": "POST /bookings — Create Booking",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"showtime_id\": \"PASTE_SHOWTIME_ID_HERE\",\n  \"seat_id\": \"PASTE_SEAT_ID_HERE\",\n  \"user_name\": \"Sivatey Kim\",\n  \"user_email\": \"sivatey@example.com\",\n  \"payment_method\": \"ABA Pay\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3001/bookings",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["bookings"]
+            },
+            "description": "SAD Endpoint: POST /bookings\n\nReplace showtime_id and seat_id with values from Step 2.\npayment_method options: 'ABA Pay', 'Wing', 'cash'\n\nProves:\n- ADR-003: MySQL ACID transaction used\n- ADR-004: Redis seat lock acquired before DB write\n- ADR-005: Notification Service called asynchronously — email sent after this returns\n\nCheck Step 4 after this to see the email notification log."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Step 4 — Verify Async Email Notification (ADR-005)",
+      "item": [
+        {
+          "name": "GET /notifications — Check Email Log",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3002/notifications",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3002",
+              "path": ["notifications"]
+            },
+            "description": "After creating a booking, this shows the email notification that was sent asynchronously.\n\nProves ADR-005: The notification was logged AFTER the booking response returned.\nIn production, this would trigger a real SendGrid email to the user.\nNotification channel is 'email' only — no SMS."
+          }
+        },
+        {
+          "name": "POST /notify — Send Email Directly",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"booking_id\": \"test-booking-001\",\n  \"type\": \"confirmation\",\n  \"user_name\": \"Sokhomal Test\",\n  \"user_email\": \"sokhomal@example.com\",\n  \"movie_name\": \"Avengers: Doomsday\",\n  \"show_date\": \"2026-07-10\",\n  \"show_time\": \"18:00:00\",\n  \"theater\": \"Cinema 1\",\n  \"seat_number\": \"B1\",\n  \"category\": \"premium\",\n  \"total_price\": 8.00,\n  \"payment_method\": \"Wing\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3002/notify",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3002",
+              "path": ["notify"]
+            },
+            "description": "SAD Endpoint: POST /notify\n\nNormally called by Booking Service asynchronously.\nYou can also call it directly to show Notification Service works independently (ADR-001).\n\nEmail channel only — simulates a SendGrid API call in production."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Step 5 — Double-Booking Prevention (ADR-004)",
+      "item": [
+        {
+          "name": "POST /bookings — Book Same Seat Again",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"showtime_id\": \"PASTE_SAME_SHOWTIME_ID_HERE\",\n  \"seat_id\": \"PASTE_SAME_SEAT_ID_HERE\",\n  \"user_name\": \"Sveita Chan\",\n  \"user_email\": \"sveita@example.com\",\n  \"payment_method\": \"Wing\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3001/bookings",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["bookings"]
+            },
+            "description": "ADR-004 DEMO: Use the SAME showtime_id and seat_id from Step 3.\n\nExpected response: 409 Conflict\n{ 'error': 'Seat is temporarily held by another user' }\n\nThis proves the Redis TTL seat-lock is working:\nSET seat_lock:{seat_id} NX EX 600\nNX = only set if not exists — second request gets blocked immediately."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Step 6 — View & Cancel Bookings",
+      "item": [
+        {
+          "name": "GET /bookings — All Bookings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3001/bookings",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["bookings"]
+            },
+            "description": "Returns all confirmed bookings from MySQL.\nCopy a booking 'id' to use in the cancel request below."
+          }
+        },
+        {
+          "name": "DELETE /bookings/:id — Cancel Booking",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3001/bookings/PASTE_BOOKING_ID_HERE",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["bookings", "PASTE_BOOKING_ID_HERE"]
+            },
+            "description": "Replace PASTE_BOOKING_ID_HERE with a booking id from Get All Bookings.\n\nCancels the booking, releases the seat back to available, releases Redis lock,\nand asynchronously sends a cancellation email notification."
+          }
+        }
+      ]
+    }
+  ]
+}
