@@ -175,25 +175,6 @@ Seat returns to available. Cancellation email notification fires asynchronously.
 
 ---
 
-## Q&A — Key Questions to Answer
-
-**"Why does Booking call Notification asynchronously?"**  
-Sending an email should never block or delay the user's booking confirmation. If the Notification Service is slow or temporarily down, the booking still succeeds. This is ADR-005 — async communication for non-critical side effects.
-
-**"What happens if the Notification Service crashes?"**  
-The Booking Service logs a warning but the booking is still confirmed and saved in MySQL. The user gets their booking — the email may be missed, but that is acceptable since notifications are not part of the critical booking transaction. This proves ADR-001 fault isolation.
-
-**"How does Redis prevent double-booking?"**  
-When a user selects a seat, the Booking Service calls `SET seat_lock:{seat_id} NX EX 600` in Redis. `NX` means "only set if the key does not exist." If two users try to book the same seat simultaneously, only one gets the lock — the other receives a 409 Conflict immediately, before even touching MySQL. This is ADR-004.
-
-**"Why MySQL and not a NoSQL database for Booking?"**  
-Seat booking is a concurrency problem that requires ACID transactions and `FOR UPDATE` row-level locking to guarantee that exactly one booking is confirmed per seat. NoSQL databases do not support this natively. This is ADR-003.
-
-**"What email provider do you use?"**  
-In production, the Notification Service would call the SendGrid API to deliver emails. In this prototype, emails are simulated — the full email body is logged to the console and saved to MySQL so graders can inspect what would be sent.
-
----
-
 ## Submission Files
 
 ```
